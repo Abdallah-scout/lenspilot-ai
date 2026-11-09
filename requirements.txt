@@ -1,0 +1,6 @@
+# Tested with Python 3.14 on 2026-11-09 (anthropic 2.6.0, streamlit 1.67.0, pydantic 2.14.3, pillow 13.0.0, pytest 9.2.0)
+anthropic>=2.6,<3
+pydantic>=2.7,<3
+pillow>=10.0
+streamlit>=1.67,<2
+pytest>=8.0

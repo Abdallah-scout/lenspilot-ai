@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+# runtime state: sandbox copy, run logs, approval secret
+var/
+
+# course handout (instructor material, not redistributed)
+project3-operator.pdf
