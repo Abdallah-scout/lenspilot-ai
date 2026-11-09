@@ -16,7 +16,7 @@ python -m venv .venv && source .venv/bin/activate
 python -m pip install -r requirements.txt
 export ANTHROPIC_API_KEY=...        # optional: enables the live Claude agent
 streamlit run app.py                # UI on http://localhost:8501
-python -m pytest                    # 41 offline tests, no API calls
+python -m pytest                    # 42 offline tests, no API calls
 python -m sandbox.reset             # restore the sandbox between demos
 python -m agent.cli "Find my best three restaurant photos" --decision approve   # headless run
 ```
@@ -66,7 +66,7 @@ limit, stop reason and error code.
 
 ## Verified results (2026-11-09, Python 3.14)
 
-* `python -m pytest` → **41 passed**. All tests use mock providers and
+* `python -m pytest` → **42 passed**. All tests use mock providers and
   temporary sandboxes. They prove:
   * the step limit is never exceeded (limits 1, 3 and 8, plus parallel bursts);
   * retries count toward the limit;

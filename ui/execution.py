@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 import json
 
 import streamlit as st
@@ -10,6 +9,16 @@ import streamlit as st
 from agent.state import AgentState
 from agent.tracing import read_trace, summarize_trace
 from ui.common import active_run_id, get_services, provider_label, status_badge
+
+
+# Link/image/HTML syntax is what enables exfiltration; emphasis chars (*, _) are harmless.
+_MD_ENTITIES = {"[": "&#91;", "]": "&#93;", "(": "&#40;", ")": "&#41;", "!": "&#33;",
+                "`": "&#96;", "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;"}
+
+
+def safe_inline(text: str) -> str:
+    """Neutralise HTML *and* markdown syntax in untrusted text (model output, tool data)."""
+    return "".join(_MD_ENTITIES.get(c, c) for c in str(text))
 
 
 def _args_summary(args: dict) -> str:
@@ -33,7 +42,7 @@ def _timeline(events: list[dict]) -> None:
     for e in events:
         kind = e["event"]
         if kind == "run_started":
-            line, cls = f"Run started with {html.escape(provider_label(e['provider']))}", ""
+            line, cls = f"Run started with {provider_label(e['provider'])}", ""
             detail = f"Request: {e['request']}"
         elif kind == "llm_call":
             if not e.get("ok"):
@@ -67,8 +76,8 @@ def _timeline(events: list[dict]) -> None:
             detail = f"{e['steps']}/{e['max_steps']} steps, {e['llm_calls']} model calls"
         else:
             line, cls, detail = kind, "", ""
-        st.markdown(f'<div class="lp-step {cls}"><b>{html.escape(line)}</b><br>'
-                    f'<span class="lp-muted">{e["ts"][11:19]} UTC  {html.escape(detail)}</span></div>',
+        st.markdown(f'<div class="lp-step {cls}"><b>{safe_inline(line)}</b><br>'
+                    f'<span class="lp-muted">{e["ts"][11:19]} UTC  {safe_inline(detail)}</span></div>',
                     unsafe_allow_html=True)
 
 
@@ -115,7 +124,7 @@ def render() -> None:
         tool_history_table(state)
         if state.final_result:
             st.subheader("Final answer")
-            st.write(state.final_result)
+            st.text(state.final_result)  # untrusted model output: plain text only
     with st.expander("Raw trace (JSONL events)"):
         st.json(events, expanded=False)
     with st.expander("Evaluation summary (summarize_trace)"):

