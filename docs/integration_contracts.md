@@ -13,7 +13,7 @@ change one of these contracts, update this file and run `python -m pytest`.
 | Tools and schemas | `tools/` | Khalil | **Baseline written by Abdallah** to unblock integration |
 | Sandbox, fixtures, reset | `sandbox/` | Khalil | **Baseline written by Abdallah** |
 | Policy, approval tokens, injection scan | `security/` | Skander | **Baseline written by Abdallah** |
-| 30+ scenarios, metrics, report, `errors.md` | `eval/`, docs | Yasmine | **Not started here.** Hooks below are ready |
+| 36 scenarios, metrics, report, `errors.md`, `postmortem.md` | `eval/`, docs | Yasmine | **Implemented, tested, 100% pass** |
 | `threat_model.md` | docs | Skander | **Not started here** |
 
 "Baseline" means a minimal working version so the agent can run end to end.

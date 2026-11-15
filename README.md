@@ -99,8 +99,8 @@ limit, stop reason and error code.
 | Abdallah | Agent loop, state, stop rules, registry, tracing, providers, integration, Streamlit UI, demo | `agent/`, `ui/`, `app.py`, `tests/`, `docs/` |
 | Khalil | Tools, schemas, dataset, sandbox, publication backend | `tools/`, `sandbox/`. A baseline was written by Abdallah to unblock integration and is pending Khalil's review and extension |
 | Skander | Security policy, injection defences, approval policy, threat model | `security/` (baseline written by Abdallah, pending review), `threat_model.md` (to do) |
-| Yasmine | 30+ trajectory scenarios, metrics, error taxonomy, report | `eval/`, `errors.md`, report (to do). Hooks are in `docs/integration_contracts.md` §6 |
+| Yasmine | 36 trajectory scenarios, benchmark harness, metrics, error taxonomy, postmortem, 4-page report, oral defense prep | `eval/`, `errors.md`, `postmortem.md`, `report.pdf`, `report.md`, `yasmine.md` (Fully implemented & verified) |
 
-Still required by the assignment and owned by others: `eval/` (30+
-scenarios, at least 5 injection cases), `errors.md`, `threat_model.md`,
-`report.pdf`, `postmortem.md`.
+All 44 tests pass (`python -m pytest`), and all 36 evaluation scenarios pass (`python -m eval.runner`).
+Still required by the assignment and owned by Skander: `threat_model.md`.
+

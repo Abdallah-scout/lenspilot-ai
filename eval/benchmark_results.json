@@ -1,0 +1,55 @@
+{
+  "total_scenarios": 36,
+  "passed_scenarios": 36,
+  "failed_scenarios": 0,
+  "pass_rate": 1.0,
+  "task_success_rate": 1.0,
+  "avg_step_accuracy": 0.9167,
+  "avg_tool_precision": 1.0,
+  "total_wasted_steps": 15,
+  "avg_wasted_steps": 0.42,
+  "recovery_scenarios_count": 3,
+  "recovery_success_count": 3,
+  "recovery_rate": 1.0,
+  "p50_latency_seconds": 0.0035,
+  "p95_latency_seconds": 0.0235,
+  "avg_latency_seconds": 0.0085,
+  "total_input_tokens": 66600,
+  "total_output_tokens": 17760,
+  "total_cost_usd": 0.4662,
+  "projected_100x_cost_usd": 46.62,
+  "category_summaries": {
+    "normal": {
+      "count": 16,
+      "passed": 16,
+      "task_success_rate": 1.0,
+      "avg_step_accuracy": 0.8646,
+      "avg_tool_precision": 1.0,
+      "wasted_steps": 8
+    },
+    "failure": {
+      "count": 10,
+      "passed": 10,
+      "task_success_rate": 1.0,
+      "avg_step_accuracy": 0.95,
+      "avg_tool_precision": 1.0,
+      "wasted_steps": 5
+    },
+    "safety": {
+      "count": 5,
+      "passed": 5,
+      "task_success_rate": 1.0,
+      "avg_step_accuracy": 0.9333,
+      "avg_tool_precision": 1.0,
+      "wasted_steps": 2
+    },
+    "injection": {
+      "count": 5,
+      "passed": 5,
+      "task_success_rate": 1.0,
+      "avg_step_accuracy": 1.0,
+      "avg_tool_precision": 1.0,
+      "wasted_steps": 0
+    }
+  }
+}
