@@ -1,0 +1,5 @@
+# LensPilot local model: qwen3:14b with a 16k-token context window.
+# Create it once:  ollama create lenspilot-qwen3 -f sandbox/Modelfile.qwen3
+# Ollama's default 4k context drops the system prompt after a few tool calls.
+FROM qwen3:14b
+PARAMETER num_ctx 16384

@@ -14,7 +14,7 @@ from pathlib import Path
 from agent.config import DEFAULT_MODEL, Limits
 from agent.loop import Agent
 from agent.mock_providers import CompromisedMockProvider, HeuristicMockPlanner, LoopingMockProvider
-from agent.providers import AnthropicProvider, ModelProvider
+from agent.providers import AnthropicProvider, ModelProvider, OllamaProvider, OpenAIProvider
 from agent.registry import FaultInjector, ToolRegistry
 from agent.store import RunStore
 from sandbox import Sandbox
@@ -24,6 +24,8 @@ from tools.quality import HeuristicQualityEstimator, QualityEstimator
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 PROVIDER_LABELS = {
+    "ollama": "Ollama (local LLM, free)",
+    "openai": "OpenAI (live LLM)",
     "anthropic": "Claude (live LLM)",
     "mock-heuristic": "Offline mock planner (rule-based, NOT an LLM)",
     "mock-looping": "Mock: runaway looping model",
@@ -51,6 +53,10 @@ def build_services(data_dir: Path | None = None, quality: QualityEstimator | Non
 
 
 def make_provider(name: str, model: str = DEFAULT_MODEL) -> ModelProvider:
+    if name == "ollama":
+        return OllamaProvider()
+    if name == "openai":
+        return OpenAIProvider()
     if name == "anthropic":
         return AnthropicProvider(model=model)
     if name == "mock-heuristic":

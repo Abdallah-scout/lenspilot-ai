@@ -25,11 +25,30 @@ Environment variables (see `.env.example`):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Enables the live agent. Without it only mock providers are offered |
+| `OPENAI_API_KEY` | none | Enables the live OpenAI agent (put it in `.env`, which is git-ignored and loaded automatically) |
+| `LENSPILOT_OPENAI_MODEL` | `gpt-4.1-mini` | OpenAI model id |
+| `ANTHROPIC_API_KEY` | none | Enables the live Claude agent. Without a key only mock providers are offered |
 | `LENSPILOT_MODEL` | `claude-opus-5-5` | Model id |
 | `LENSPILOT_EFFORT` | `medium` | Model effort level |
 | `LENSPILOT_DATA_DIR` | `var/` | Holds the sandbox, run logs and approval secret |
 | `LENSPILOT_APPROVAL_SECRET` | random per install | HMAC secret for approval tokens |
+| `LENSPILOT_OLLAMA_MODEL` | none | Enables the free local agent via Ollama (e.g. `lenspilot-qwen3`) |
+| `LENSPILOT_OLLAMA_URL` | `http://localhost:11434/v1` | Ollama address |
+| `LENSPILOT_OLLAMA_THINK` | off | `1` keeps a reasoning model's long "thinking" on (much slower) |
+
+### Free local model (Ollama)
+
+No key and no cost; tested on an RTX 5060 Ti 16 GB (full run in ~35 s).
+
+```bash
+ollama pull qwen3:14b
+ollama create lenspilot-qwen3 -f sandbox/Modelfile.qwen3   # same model, 16k-token context
+echo LENSPILOT_OLLAMA_MODEL=lenspilot-qwen3 >> .env
+```
+
+Ollama's default 4k-token context is too small: the system prompt is silently dropped
+after ~4 tool calls and the model stops calling tools. Llama 3.1 8B was tested and is
+not reliable enough (invented ids, wrong argument names).
 
 ## Architecture
 

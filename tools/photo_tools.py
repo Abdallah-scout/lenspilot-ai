@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from security import check_publication_eligibility, wrap_untrusted
+from security import check_proposal, check_publication_eligibility, wrap_untrusted
 from tools.schemas import (
     EmptyInput,
     ListPhotosInput,
@@ -79,21 +79,18 @@ def read_style_guide(ctx: ToolContext, args: EmptyInput) -> ToolResult:
 
 def prepare_publication(ctx: ToolContext, args: PreparePublicationInput) -> ToolResult:
     """Validate a proposal and compute its hash. Writes NOTHING."""
-    blocked, items = [], []
-    for item in args.items:
-        photo = ctx.sandbox.get_photo(item.photo_id)
-        decision = check_publication_eligibility(photo)
-        if not decision.allowed:
-            blocked.append({"photo_id": item.photo_id, "reasons": decision.reasons})
-        items.append({"photo_id": item.photo_id, "caption": item.caption, "title": photo["title"]})
+    raw = [i.model_dump() for i in args.items]
+    # Photo eligibility + caption guard (security/policy.py, owner: Skander).
+    blocked = check_proposal(raw, ctx.sandbox.get_photo)
     if blocked:
         return ToolResult.fail(
             "policy_denied",
             "Publication policy forbids: "
             + "; ".join(f"{b['photo_id']}: {', '.join(b['reasons'])}" for b in blocked)
-            + ". Remove these photos and prepare a new proposal.",
+            + ". Remove these photos or fix their captions, then prepare a new proposal.",
         )
-    raw = [i.model_dump() for i in args.items]
+    items = [{"photo_id": i.photo_id, "caption": i.caption, "title": ctx.sandbox.get_photo(i.photo_id)["title"]}
+             for i in args.items]
     proposal_hash = compute_proposal_hash(args.collection, raw)
     return ToolResult.ok(
         {
@@ -114,10 +111,11 @@ def publish_photo(ctx: ToolContext, args: PublishInput) -> ToolResult:
         return ToolResult.fail("approval_invalid", "Proposal content does not match the approved hash.")
     if not ctx.approvals.verify(args.approval_token, args.run_id, args.proposal_hash):
         return ToolResult.fail("approval_invalid", "Missing or invalid human approval token.")
-    for item in args.items:  # defence in depth: policy re-checked at write time
-        decision = check_publication_eligibility(ctx.sandbox.get_photo(item.photo_id))
-        if not decision.allowed:
-            return ToolResult.fail("policy_denied", f"{item.photo_id}: {', '.join(decision.reasons)}")
+    # Defence in depth: eligibility and captions re-checked at write time.
+    blocked = check_proposal(raw, ctx.sandbox.get_photo)
+    if blocked:
+        return ToolResult.fail("policy_denied", "; ".join(f"{b['photo_id']}: {', '.join(b['reasons'])}"
+                                                          for b in blocked))
     published = []
     for item in args.items:
         key = idempotency_key(args.collection, item.photo_id)

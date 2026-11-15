@@ -15,9 +15,9 @@ with st.sidebar:
     st.markdown("### LensPilot")
     options = provider_options()
     provider = st.selectbox("Agent model", options, format_func=provider_label, key="provider")
-    if "anthropic" not in options:
-        st.caption("Set ANTHROPIC_API_KEY to enable the live Claude agent. Until then only mock "
-                   "providers are available.")
+    if not {"ollama", "openai", "anthropic"} & set(options):
+        st.caption("Set LENSPILOT_OLLAMA_MODEL (local, free) or OPENAI_API_KEY in .env to enable the "
+                   "live agent. Until then only mock providers are available.")
     simulate_fault = st.toggle("Simulate a quality-tool outage", key="simulate_fault",
                                help="The first quality evaluation of the next run fails with a "
                                     "retryable error. Labelled [simulated fault] in the trace.")

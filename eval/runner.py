@@ -21,7 +21,7 @@ from agent.mock_providers import (
     LoopingMockProvider,
     ScriptedProvider,
 )
-from agent.providers import AnthropicProvider
+from agent.providers import AnthropicProvider, OllamaProvider, OpenAIProvider
 from agent.state import AgentStatus
 from agent.tracing import read_trace, summarize_trace
 from eval.models import EvaluationResult, HumanDecision, Scenario, ScenarioCategory, SuiteSummary
@@ -193,6 +193,10 @@ class EvalRunner:
             return CompromisedMockProvider()
         if scenario.provider_type == "anthropic":
             return AnthropicProvider()
+        if scenario.provider_type == "openai":
+            return OpenAIProvider()
+        if scenario.provider_type == "ollama":
+            return OllamaProvider()
         raise ValueError(f"Unknown provider_type {scenario.provider_type!r}")
 
 

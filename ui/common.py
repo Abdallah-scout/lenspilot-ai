@@ -16,7 +16,7 @@ import streamlit as st
 
 from agent.integration import PROVIDER_LABELS, Services, build_agent, build_services, make_provider
 from agent.loop import Agent
-from agent.providers import AnthropicProvider
+from agent.providers import AnthropicProvider, OllamaProvider, OpenAIProvider
 from agent.state import AgentStatus
 from security import check_publication_eligibility
 
@@ -77,7 +77,10 @@ def get_services() -> Services:
 
 def provider_options() -> list[str]:
     opts = ["mock-heuristic", "mock-looping", "mock-compromised"]
-    return (["anthropic"] if AnthropicProvider.available() else []) + opts
+    live = (["ollama"] if OllamaProvider.available() else []) + \
+           (["openai"] if OpenAIProvider.available() else []) + \
+           (["anthropic"] if AnthropicProvider.available() else [])
+    return live + opts
 
 
 def get_agent(provider_name: str, faults: dict | None = None) -> Agent:
