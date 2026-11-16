@@ -119,7 +119,7 @@ limit, stop reason and error code.
 | Abdallah | Agent loop, state, stop rules, registry, tracing, providers, integration, Streamlit UI, demo | `agent/`, `ui/`, `app.py`, `tests/`, `docs/` |
 | Khalil | Tools, schemas, fixtures, sandbox, atomic and idempotent publication | `tools/`, `sandbox/`, `tests/test_photo_tools.py`, `tests/test_sandbox.py` |
 | Skander | Security policy, injection defences, approval policy, threat model | `security/` (baseline written by Abdallah, pending review), `threat_model.md` (to do) |
-| Yasmine | 36 trajectory scenarios, benchmark harness, metrics, error taxonomy, postmortem, 4-page report, oral defense prep | `eval/`, `errors.md`, `postmortem.md`, `report.pdf`, `report.md`, `yasmine.md` (Fully implemented & verified) |
+| Yasmine | 36 trajectory scenarios, benchmark harness, metrics, error taxonomy, postmortem, reports (4-page & 1-page summary) | `eval/`, `errors.md`, `postmortem.md`, `report.pdf`, `report.md`, `report_2.pdf`, `report_2.md` (Fully implemented & verified) |
 
 All 44 tests pass (`python -m pytest`), and all 36 evaluation scenarios pass (`python -m eval.runner`).
 Still required by the assignment and owned by Skander: `threat_model.md`.
