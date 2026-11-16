@@ -163,7 +163,7 @@ def build_pdf(output_path: Path):
     story.append(Paragraph("• <b>Inspect:</b> Agent inspects local catalog assets, reads camera EXIF metadata, and queries quality heuristics.", bullet_style))
     story.append(Paragraph("• <b>Prepare:</b> Agent adheres to the studio style guide, drafts captions, and compiles a candidate proposal.", bullet_style))
     story.append(Paragraph("• <b>Approve:</b> Agent halts at an explicit human checkpoint; zero files are written and zero LLM tokens are consumed while awaiting human review.", bullet_style))
-    story.append(Paragraph("• <b>Write:</b> Upon human confirmation, the orchestrator verifies a cryptographic HMAC token and writes to an isolated sandbox.", bullet_style))
+    story.append(Paragraph("• <b>Write:</b> Upon human confirmation, the orchestrator verifies a time-limited cryptographic HMAC token, re-checks the privacy policy and every caption, then writes to an isolated sandbox.", bullet_style))
     story.append(Paragraph("• <b>Verify:</b> The orchestrator confirms on-disk file creation and integrity before the model synthesizes a final summary.", bullet_style))
 
     story.append(Spacer(1, 4))
@@ -173,10 +173,13 @@ def build_pdf(output_path: Path):
         body_style,
     ))
     story.append(Paragraph("• <b>Unexposed Write Path:</b> The publication tool (<code>publish_photo</code>) is completely omitted from <code>registry.model_tool_definitions()</code>. The model cannot invoke write operations, regardless of adversarial persuasion. The only write path exists inside <code>Agent.approve()</code>.", bullet_style))
-    story.append(Paragraph("• <b>Cryptographic HMAC Proposal Binding:</b> Human approval generates an HMAC-SHA256 signature calculated over the run ID and proposal hash: <code>Token = HMAC(Secret, run_id || SHA256(collection || items))</code>. If an attacker alters a caption or photo ID after review, the hash mismatches and publication is halted.", bullet_style))
+    story.append(Paragraph("• <b>Cryptographic HMAC Proposal Binding:</b> Human approval generates an HMAC-SHA256 signature over the run ID, proposal hash and issue time: <code>Token = t . HMAC(Secret, run_id || SHA256(collection || items) || t)</code>. Altering a caption or photo ID after review breaks the hash; tokens cannot be replayed into another run, <b>expire after 15 minutes</b>, and future-dated or malformed tokens are refused (constant-time compare, precise failure reason).", bullet_style))
+    story.append(Paragraph("• <b>Deny-by-Default Policy + Caption Guard (checked twice):</b> Only photos with exactly <code>visibility='public'</code> and <code>client_consent='granted'</code> pass. Model-written captions carrying instructions, links, e-mails, HTML/Markdown or hidden characters are rejected with <code>policy_denied</code> in <code>prepare_publication</code>, before the human is asked, and again in <code>publish_photo</code>.", bullet_style))
+    story.append(Paragraph("• <b>Hardened Injection Scanner (observability):</b> Text is Unicode-normalised (NFKC) and stripped of zero-width/bidi characters before matching; 8 pattern families plus a <code>hidden_characters</code> flag. A missed detection costs a trace flag, never a write.", bullet_style))
     story.append(Paragraph("• <b>Strict Pydantic Validation:</b> All tool inputs inherit from a base model with <code>extra='forbid'</code>. Extra parameters, invalid types, or directory traversal strings (e.g. <code>../../etc/passwd</code>) are rejected before execution.", bullet_style))
     story.append(Paragraph("• <b>Scoped, Idempotent Sandbox:</b> Writes are restricted to <code>sandbox/published/</code> using atomic hard links (<code>os.link</code>) keyed by <code>SHA256(collection || photo_id)[:32]</code>, guaranteeing zero duplicate entries.", bullet_style))
-    story.append(Paragraph("• <b>Code-Enforced Stopping Rules:</b> Hard execution limits (8 steps, 2 retries, 12 LLM calls, 180s active time, 200k tokens) terminate rogue or looping models independently of model cooperation.", bullet_style))
+    story.append(Paragraph("• <b>Code-Enforced Stopping Rules:</b> Hard execution limits (8 steps, 2 retries, 12 LLM calls, 180s active time, 200k tokens) terminate rogue or looping models independently of model cooperation. A 12-case edge-case grid proves the step count never exceeds the limit.", bullet_style))
+    story.append(Paragraph("• <b>Safety Invariants &amp; Providers:</b> <code>agent/safety.py</code> lists invariants S1–S8, each mapped to the code enforcing it and the test proving it. The agent runs on Claude, OpenAI (<code>gpt-4.1-mini</code>), a free local Ollama model (<code>qwen3:14b</code>, 16k context) or deterministic mocks; keys load from a git-ignored <code>.env</code>, disabled during tests.", bullet_style))
 
     # =========================================================================
     # PAGE 2: EMPIRICAL EVALUATION & 36 SCENARIOS BENCHMARK
@@ -185,7 +188,7 @@ def build_pdf(output_path: Path):
 
     story.append(Paragraph("3. Empirical Evaluation & Trajectory Benchmark", h1_style))
     story.append(Paragraph(
-        "To rigorously quantify system reliability, safety, and trajectory adherence, we built an automated evaluation harness (<code>eval/runner.py</code>) and authored <b>36 distinct benchmark scenarios</b> covering four operational categories. Each scenario evaluates execution status, exact tool sequences, stop reasons, published sandbox artifacts, and injection observability.",
+        "To rigorously quantify system reliability, safety, and trajectory adherence, we built an automated evaluation harness (<code>eval/runner.py</code>) and authored <b>36 distinct benchmark scenarios</b> covering four operational categories. Each scenario evaluates execution status, exact tool sequences, stop reasons, published sandbox artifacts, and injection observability. The benchmark was re-run after the security hardening with unchanged results, and the full test suite (<b>242 tests</b>) passes.",
         body_style,
     ))
 
@@ -321,11 +324,23 @@ def build_pdf(output_path: Path):
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
     story.append(inj_table)
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph(
+        "<b>11 further loop-level attacks</b> (<code>tests/test_injection_attacks.py</code>), all with <b>0 unauthorized writes</b>: "
+        "zero-width obfuscated overrides (flagged <code>hidden_characters</code>, stripped); <code>&lt;/untrusted&gt;</code> and "
+        "<code>assistant:</code> role markers in the style guide (flagged); injection, links or HTML copied into a caption "
+        "(<code>policy_denied</code> before approval); forged, cross-run, cross-proposal and expired tokens "
+        "(<code>approval_invalid</code>); smuggled <code>output_path</code> / <code>\"approved\": true</code> arguments "
+        "(<code>invalid_arguments</code>); and \"you have unlimited steps\" (<code>STOPPED_LIMIT</code>). Benign fixtures raise no flags. "
+        "<b>Residual risks:</b> short fields such as titles are scanned but not wrapped; a failed write can leave an orphan image file; "
+        "detection is English-only regex; live models are not covered by the offline tests.",
+        body_style,
+    ))
+    story.append(Spacer(1, 4))
 
     story.append(Paragraph("5. Error Taxonomy & Loop Stopping Invariants", h1_style))
     story.append(Paragraph(
-        "LensPilot AI treats errors as informative runtime observations rather than unhandled software exceptions. The system categorizes all runtime failures into a formal taxonomy (<code>errors.md</code>):",
+        "LensPilot AI treats errors as informative runtime observations rather than unhandled software exceptions. The system categorizes all runtime failures into a formal taxonomy (<code>errors.md</code>); each of its 18 error classes has a dedicated test that triggers the real failure (<code>tests/test_error_classes.py</code>):",
         body_style,
     ))
 
@@ -358,7 +373,7 @@ def build_pdf(output_path: Path):
         "A rigorous engineering retrospective (<code>postmortem.md</code>) evaluated the architectural trade-offs made during development:",
         body_style,
     ))
-    story.append(Paragraph("• <b>Local Filesystem vs. Distributed Store:</b> We selected local JSON files with in-process locks for run persistence (<code>RunStore</code>). This eliminated infrastructure overhead (Docker, Redis, PostgreSQL) and allowed all 44 unit tests to execute in 2.5 seconds. However, this restricts deployment to single-server environments. A production v2 would adopt SQLite in WAL mode.", body_style))
+    story.append(Paragraph("• <b>Local Filesystem vs. Distributed Store:</b> We selected local JSON files with in-process locks for run persistence (<code>RunStore</code>). This eliminated infrastructure overhead (Docker, Redis, PostgreSQL) and allows the full suite of 242 tests to execute in about 17 seconds. However, this restricts deployment to single-server environments. A production v2 would adopt SQLite in WAL mode.", body_style))
     story.append(Paragraph("• <b>Batch vs. Sequential Reads:</b> Early evaluations revealed high turn overhead when querying photos individually. Introducing batched reads (<code>NORM-14</code>) for metadata and quality evaluation reduced token consumption by 35% and active latency by 40%.", body_style))
     story.append(Paragraph("• <b>Deterministic Heuristic vs. Deep Neural Quality:</b> To ensure instantaneous test execution without GPU requirements, quality scoring used a deterministic pixel sharpness and contrast heuristic. The <code>QualityEstimator</code> protocol allows plug-and-play integration of KonCept512 without altering the agent loop.", body_style))
 
@@ -382,8 +397,8 @@ def build_pdf(output_path: Path):
         [
             Paragraph("<b>Skander</b>", table_cell_style),
             Paragraph("Safety & Failure Engineer", table_cell_style),
-            Paragraph("Publication policy checks (<code>policy.py</code>), HMAC approval token authority (<code>approval.py</code>), prompt injection pattern scanner (<code>injection.py</code>), and threat modeling.", table_cell_style),
-            Paragraph("<code>security/</code>", table_cell_style),
+            Paragraph("Deny-by-default policy + caption guard (<code>policy.py</code>), expiring HMAC approval tokens (<code>approval.py</code>), normalised injection scanner (<code>injection.py</code>), invariants S1–S8 (<code>safety.py</code>), threat model, 163 safety/injection/error/stop-rule tests, OpenAI &amp; Ollama providers.", table_cell_style),
+            Paragraph("<code>security/</code>, <code>agent/safety.py</code>, <code>threat_model.md</code>", table_cell_style),
         ],
         [
             Paragraph("<b>Yasmine</b>", table_cell_style),
@@ -406,7 +421,7 @@ def build_pdf(output_path: Path):
     story.append(Spacer(1, 6))
     story.append(Paragraph("8. Conclusion", h1_style))
     story.append(Paragraph(
-        "LensPilot AI confirms that autonomous agent systems can be safely deployed in high-consequence domains when safety is enforced as a structural code invariant rather than a prompting guideline. By isolating write tools, binding human approvals with cryptographic HMAC signatures, enforcing strict Pydantic schemas, and bounding runs with deterministic stopping rules, LensPilot AI achieves <b>100% policy compliance, zero unauthorized file writes, and robust immunity against prompt injection attacks</b>.",
+        "LensPilot AI confirms that autonomous agent systems can be safely deployed in high-consequence domains when safety is enforced as a structural code invariant rather than a prompting guideline. By isolating write tools, binding human approvals with time-limited cryptographic HMAC signatures, enforcing the privacy policy and caption guard twice, enforcing strict Pydantic schemas, and bounding runs with deterministic stopping rules, LensPilot AI achieved <b>100% policy compliance and zero unauthorized file writes across every tested scenario and injection attack</b>.",
         body_style,
     ))
 
