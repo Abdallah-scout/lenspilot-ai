@@ -106,7 +106,8 @@ path, which is the point of an agent. The safety outcomes must stay identical.
 * **"What stops a double publish?"** Three layers:
   * the approve button is idempotent (state check under a lock);
   * the idempotency key is the hash of collection and photo;
-  * the write is an exclusive `os.link`.
+  * the image and record are committed together under that key, and a
+    competing write reuses the existing publication.
 
   This is covered by `test_repeated_approval_does_not_duplicate`.
 * **"What if the caption changes after I approve?"** The token is an HMAC of

@@ -318,6 +318,8 @@ class Agent:
             rec = self.sandbox.get_publication(item["publication_key"])
             if rec is None or rec["photo_id"] != item["photo_id"]:
                 return False
+            if not (self.sandbox.published_dir / rec["image_file"]).is_file():
+                return False
         return True
 
     @staticmethod

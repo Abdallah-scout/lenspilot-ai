@@ -1,6 +1,6 @@
 """Tool input schemas, result envelope and shared context.
 
-INTEGRATION BASELINE — owner: Khalil (tool schemas).
+Owner: Khalil (tool schemas).
 Contract consumed by agent/registry.py — see docs/integration_contracts.md.
 Every input model forbids extra fields, so the model cannot smuggle
 unexpected arguments (e.g. a file path) into a tool.
@@ -73,13 +73,11 @@ class PreparePublicationInput(_Strict):
         return items
 
 
-class PublishInput(_Strict):
+class PublishInput(PreparePublicationInput):
     """Internal input for the write tool. Not exposed to the model."""
 
     run_id: str
     proposal_hash: str
-    collection: Collection
-    items: list[PublicationItem] = Field(min_length=1, max_length=5)
     approval_token: str
 
 

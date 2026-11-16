@@ -1,12 +1,15 @@
 """Reset the sandbox to its pristine fixture state.
 
-Run:  python -m sandbox.reset            (uses LENSPILOT_SANDBOX_DIR or var/sandbox)
-Run logs in var/runs are NOT deleted: they are evaluation evidence.
+Run between demos: python -m sandbox.reset
+Uses LENSPILOT_SANDBOX_DIR or the sandbox under LENSPILOT_DATA_DIR (default var).
+Run logs are kept as evaluation evidence.
 """
 
+from agent.config import load_env_file
 from sandbox.manager import Sandbox
 
 if __name__ == "__main__":
+    load_env_file()
     sb = Sandbox()
     sb.reset()
     print(f"Sandbox reset at {sb.root} ({len(sb.catalog())} photos, 0 published).")
