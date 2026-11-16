@@ -10,8 +10,8 @@ change one of these contracts, update this file and run `python -m pytest`.
 |---|---|---|---|
 | Agent loop, state, stop rules, registry, tracing, providers | `agent/` | Abdallah | Implemented, tested |
 | Streamlit UI | `app.py`, `ui/` | Abdallah | Implemented, tested |
-| Tools and schemas | `tools/` | Khalil | **Baseline written by Abdallah** to unblock integration |
-| Sandbox, fixtures, reset | `sandbox/` | Khalil | **Baseline written by Abdallah** |
+| Tools and schemas | `tools/` | Khalil | Implemented, tested |
+| Sandbox, fixtures, reset | `sandbox/` | Khalil | Implemented, tested |
 | Policy, approval tokens, injection scan | `security/` | Skander | **Baseline written by Abdallah** |
 | 36 scenarios, metrics, report, `errors.md`, `postmortem.md` | `eval/`, docs | Yasmine | **Implemented, tested, 100% pass** |
 | `threat_model.md` | docs | Skander | **Not started here** |
@@ -66,13 +66,16 @@ KonCept512, implement the protocol and pass it to
 `image_path(id)`, `style_guide()`, `published_records()`, `get_publication(key)`,
 `write_publication(key, record, image_src) -> (record, created)`.
 
-* All writes go to `<root>/published/`. Default root: `var/sandbox`.
+* Tool writes go to `<root>/published/`. Default root: `var/sandbox`.
 * `write_publication` is idempotent. The key is `sha256(collection|photo_id)[:32]`,
-  and creation is atomic and exclusive (`os.link`).
-* `python -m sandbox.reset` restores the fixtures. Run logs are kept.
-* Fixtures (`sandbox/fixtures/`) are **synthetic** images plus a catalog with
-  **simulated** consent. Replace them with KonIQ-10k images using the same
-  catalog schema.
+  and each image and record are committed together by renaming a staged directory.
+  Older flat publication records remain readable. Multi-photo proposals check
+  all required source paths first, then commit each photo independently.
+* Run `python -m sandbox.reset` between runs to restore the fixtures
+  and empty the portfolio. Run logs are kept.
+* Fixtures in `sandbox/fixtures/` pair ten synthetic images with simulated
+  consent metadata and a caption style guide. Regenerate the images with
+  `python -m sandbox.make_fixtures`.
 
 ## 3. Security (Skander)
 

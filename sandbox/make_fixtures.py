@@ -1,10 +1,7 @@
 """Generate the SYNTHETIC demo photo fixtures (deterministic).
 
-INTEGRATION BASELINE — owner: Khalil (dataset / sandbox).
-Written by Abdallah only to unblock agent integration. These images are
-procedurally generated stand-ins, NOT KonIQ-10k photographs. Replace them by
-dropping real images into ``sandbox/fixtures/images`` and editing
-``catalog.json`` (same schema).
+Owner: Khalil (dataset / sandbox). The catalog pairs each generated image
+with sample metadata and simulated consent for offline demos.
 
 Different blur / exposure settings are applied on purpose so that the
 quality heuristic produces a realistic spread of scores.

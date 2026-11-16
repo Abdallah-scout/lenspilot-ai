@@ -31,6 +31,7 @@ Environment variables (see `.env.example`):
 | `LENSPILOT_MODEL` | `claude-opus-5-5` | Model id |
 | `LENSPILOT_EFFORT` | `medium` | Model effort level |
 | `LENSPILOT_DATA_DIR` | `var/` | Holds the sandbox, run logs and approval secret |
+| `LENSPILOT_SANDBOX_DIR` | `<data dir>/sandbox` | Optional sandbox location used by the app and reset command |
 | `LENSPILOT_APPROVAL_SECRET` | random per install | HMAC secret for approval tokens |
 | `LENSPILOT_OLLAMA_MODEL` | none | Enables the free local agent via Ollama (e.g. `lenspilot-qwen3`) |
 | `LENSPILOT_OLLAMA_URL` | `http://localhost:11434/v1` | Ollama address |
@@ -116,7 +117,7 @@ limit, stop reason and error code.
 | Member | Responsibility | Location |
 |---|---|---|
 | Abdallah | Agent loop, state, stop rules, registry, tracing, providers, integration, Streamlit UI, demo | `agent/`, `ui/`, `app.py`, `tests/`, `docs/` |
-| Khalil | Tools, schemas, dataset, sandbox, publication backend | `tools/`, `sandbox/`. A baseline was written by Abdallah to unblock integration and is pending Khalil's review and extension |
+| Khalil | Tools, schemas, fixtures, sandbox, atomic and idempotent publication | `tools/`, `sandbox/`, `tests/test_photo_tools.py`, `tests/test_sandbox.py` |
 | Skander | Security policy, injection defences, approval policy, threat model | `security/` (baseline written by Abdallah, pending review), `threat_model.md` (to do) |
 | Yasmine | 36 trajectory scenarios, benchmark harness, metrics, error taxonomy, postmortem, 4-page report, oral defense prep | `eval/`, `errors.md`, `postmortem.md`, `report.pdf`, `report.md`, `yasmine.md` (Fully implemented & verified) |
 

@@ -1,6 +1,6 @@
 """Image-quality estimation.
 
-INTEGRATION BASELINE — owner: Khalil (image-quality model integration).
+Owner: Khalil (image-quality estimation).
 
 KonCept512 is NOT available in this repository, so the default estimator is
 a transparent pixel heuristic (sharpness, exposure, contrast). Its output is
@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Protocol
 
 from PIL import Image, ImageFilter, ImageStat
+from sandbox import SandboxError
 
 
 class QualityEstimator(Protocol):
@@ -31,13 +32,18 @@ class HeuristicQualityEstimator:
     PUBLISH_THRESHOLD = 60.0
 
     def assess(self, image_path: Path) -> dict:
-        with Image.open(image_path) as img:
-            gray = img.convert("L")
-            gray.thumbnail((768, 768))
-            edges = gray.filter(ImageFilter.FIND_EDGES)
-            sharp_var = ImageStat.Stat(edges).var[0]
-            stat = ImageStat.Stat(gray)
-            mean, std = stat.mean[0], stat.stddev[0]
+        try:
+            with Image.open(image_path) as img:
+                gray = img.convert("L")
+        except FileNotFoundError as exc:
+            raise SandboxError("image_missing", "Photo file is missing.") from exc
+        except (OSError, Image.DecompressionBombError) as exc:
+            raise SandboxError("corrupted_data", "Photo file could not be decoded.") from exc
+        gray.thumbnail((768, 768))
+        edges = gray.filter(ImageFilter.FIND_EDGES)
+        sharp_var = ImageStat.Stat(edges).var[0]
+        stat = ImageStat.Stat(gray)
+        mean, std = stat.mean[0], stat.stddev[0]
         # Normalise each component to 0..1 (constants calibrated on fixtures).
         sharpness = min(1.0, math.log1p(sharp_var) / math.log1p(1600))
         exposure = max(0.0, 1.0 - abs(mean - 118) / 80)

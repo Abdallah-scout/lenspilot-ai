@@ -42,8 +42,8 @@ class Services:
 
 
 def build_services(data_dir: Path | None = None, quality: QualityEstimator | None = None) -> Services:
-    data_dir = Path(data_dir or os.environ.get("LENSPILOT_DATA_DIR", PROJECT_ROOT / "var"))
-    sandbox = Sandbox(data_dir / "sandbox").ensure()
+    sandbox = Sandbox(Path(data_dir) / "sandbox" if data_dir is not None else None).ensure()
+    data_dir = Path(data_dir or os.environ.get("LENSPILOT_DATA_DIR") or PROJECT_ROOT / "var")
     return Services(
         sandbox=sandbox,
         store=RunStore(data_dir / "runs"),

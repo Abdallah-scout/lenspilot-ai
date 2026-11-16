@@ -1,6 +1,6 @@
 """LensPilot tools.
 
-INTEGRATION BASELINE — owner: Khalil (backend tools / publication).
+Owner: Khalil (backend tools / publication).
 Each handler takes (ToolContext, validated input model) and returns a
 ToolResult. Expected failures raise SandboxError (mapped to a ToolResult by
 the registry); handlers never return raw tracebacks.
@@ -116,9 +116,20 @@ def publish_photo(ctx: ToolContext, args: PublishInput) -> ToolResult:
     if blocked:
         return ToolResult.fail("policy_denied", "; ".join(f"{b['photo_id']}: {', '.join(b['reasons'])}"
                                                           for b in blocked))
-    published = []
+    # Resolve every new source before starting any writes. Previously published
+    # items can still be returned if their original source has been removed.
+    pending = []
     for item in args.items:
         key = idempotency_key(args.collection, item.photo_id)
+        existing = ctx.sandbox.get_publication(key)
+        image_src = None if existing is not None else ctx.sandbox.image_path(item.photo_id)
+        pending.append((item, key, existing, image_src))
+
+    published = []
+    for item, key, existing, image_src in pending:
+        if existing is not None:
+            published.append(_publication_result(item.photo_id, key, existing, created=False))
+            continue
         photo = ctx.sandbox.get_photo(item.photo_id)
         record = {
             "publication_key": key,
@@ -132,7 +143,16 @@ def publish_photo(ctx: ToolContext, args: PublishInput) -> ToolResult:
             "approved_by": "human",
             "published_at": datetime.now(timezone.utc).isoformat(),
         }
-        stored, created = ctx.sandbox.write_publication(key, record, ctx.sandbox.image_path(item.photo_id))
-        published.append({"photo_id": item.photo_id, "publication_key": key, "created": created,
-                          "already_published": not created, "caption": stored["caption"]})
+        stored, created = ctx.sandbox.write_publication(key, record, image_src)
+        published.append(_publication_result(item.photo_id, key, stored, created))
     return ToolResult.ok({"collection": args.collection, "published": published})
+
+
+def _publication_result(photo_id: str, key: str, stored: dict, created: bool) -> dict:
+    return {
+        "photo_id": photo_id,
+        "publication_key": key,
+        "created": created,
+        "already_published": not created,
+        "caption": stored["caption"],
+    }

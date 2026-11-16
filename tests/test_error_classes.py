@@ -12,7 +12,6 @@ from __future__ import annotations
 import errno
 import json
 import re
-import sys
 from pathlib import Path
 
 from agent.mock_providers import text, tool_use
@@ -164,7 +163,7 @@ def test_write_failed(make_agent, services, monkeypatch):
 
     def disk_full(src, dst):
         raise OSError(errno.ENOSPC, "No space left on device")
-    monkeypatch.setattr(sys.modules["sandbox.manager"].os, "link", disk_full)
+    monkeypatch.setattr(Path, "rename", disk_full)
     st = agent.approve(st.run_id, st.pending_approval.proposal_hash)
     assert st.tool_history[-1].error_code == "write_failed"
     assert st.status == AgentStatus.FAILED and st.stop_reason == "publish_failed:write_failed"

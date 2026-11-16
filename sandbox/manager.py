@@ -1,15 +1,13 @@
 """Isolated, resettable filesystem sandbox for LensPilot.
 
-INTEGRATION BASELINE — owner: Khalil (sandbox / publication backend).
-Written by Abdallah to unblock agent integration; the public contract is
-documented in docs/integration_contracts.md.
+Owner: Khalil (sandbox / publication backend).
 
 Layout (default root: ``var/sandbox``, override with LENSPILOT_SANDBOX_DIR)::
 
     catalog.json        copy of the fixture catalog (read-only for tools)
     style_guide.md      caption style guide
     photos/             source images
-    published/          the ONLY place writes go: <key>.json + <key>.<ext>
+    published/          one directory per publication, keyed by idempotency key
 
 Nothing outside the sandbox root is ever written. ``reset()`` restores the
 pristine fixture state, so every demo scenario starts from the same state.
@@ -42,8 +40,10 @@ class SandboxError(Exception):
 
 class Sandbox:
     def __init__(self, root: Path | str | None = None, fixtures: Path = FIXTURES_DIR):
-        default = os.environ.get("LENSPILOT_SANDBOX_DIR", PROJECT_ROOT / "var" / "sandbox")
-        self.root = Path(root or default).resolve()
+        if root is None:
+            data_dir = Path(os.environ.get("LENSPILOT_DATA_DIR") or PROJECT_ROOT / "var")
+            root = os.environ.get("LENSPILOT_SANDBOX_DIR") or data_dir / "sandbox"
+        self.root = Path(root).resolve()
         self.fixtures = fixtures
         self.photos_dir = self.root / "photos"
         self.published_dir = self.root / "published"
@@ -52,33 +52,66 @@ class Sandbox:
 
     # ---- lifecycle -------------------------------------------------------
     def ensure(self) -> "Sandbox":
-        if not self.catalog_path.exists():
-            self.reset()
+        if not self.catalog_path.is_file():
+            self._install_fixtures(clear_portfolio=False)
         return self
 
     def reset(self) -> None:
-        """Delete all sandbox state and restore the fixtures."""
-        if self.root.exists():
-            shutil.rmtree(self.root)
-        self.photos_dir.mkdir(parents=True)
-        self.published_dir.mkdir()
-        shutil.copy2(self.fixtures / "catalog.json", self.catalog_path)
-        shutil.copy2(self.fixtures / "style_guide.md", self.style_guide_path)
-        for img in (self.fixtures / "images").iterdir():
-            if img.is_file():
-                shutil.copy2(img, self.photos_dir / img.name)
+        """Restore fixtures and clear the portfolio between runs."""
+        self._install_fixtures(clear_portfolio=True)
+
+    def _install_fixtures(self, *, clear_portfolio: bool) -> None:
+        if self.root == PROJECT_ROOT or PROJECT_ROOT.is_relative_to(self.root):
+            raise SandboxError("path_forbidden", "Sandbox root overlaps the project checkout.")
+        fixtures = self.fixtures.resolve()
+        if self.root.is_relative_to(fixtures) or fixtures.is_relative_to(self.root):
+            raise SandboxError("path_forbidden", "Sandbox root overlaps the fixture source.")
+        for path in (self.photos_dir, self.published_dir, self.catalog_path, self.style_guide_path):
+            if path.is_symlink() or path.resolve() != path:
+                raise SandboxError("path_forbidden", "Sandbox data paths must not redirect elsewhere.")
+        self.root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=".fixtures-", dir=self.root) as tmp:
+            staged = Path(tmp)
+            staged_photos = staged / "photos"
+            staged_photos.mkdir()
+            for image in (fixtures / "images").iterdir():
+                if image.is_file():
+                    shutil.copy2(image, staged_photos / image.name)
+            shutil.copy2(fixtures / "catalog.json", staged / "catalog.json")
+            shutil.copy2(fixtures / "style_guide.md", staged / "style_guide.md")
+            if clear_portfolio:
+                self.catalog_path.unlink(missing_ok=True)
+                for directory in (self.photos_dir, self.published_dir):
+                    if directory.is_dir():
+                        shutil.rmtree(directory)
+            self.published_dir.mkdir(exist_ok=True)
+            self.photos_dir.mkdir(exist_ok=True)
+            for image in staged_photos.iterdir():
+                os.replace(image, self.photos_dir / image.name)
+            os.replace(staged / "style_guide.md", self.style_guide_path)
+            os.replace(staged / "catalog.json", self.catalog_path)
 
     # ---- reads ------------------------------------------------------------
     def catalog(self) -> list[dict]:
         try:
-            return json.loads(self.catalog_path.read_text(encoding="utf-8"))["photos"]
+            photos = json.loads(self.catalog_path.read_text(encoding="utf-8"))["photos"]
         except FileNotFoundError as exc:
             raise SandboxError("sandbox_unavailable", "Sandbox is not initialised.") from exc
-        except (json.JSONDecodeError, KeyError) as exc:
-            raise SandboxError("corrupted_data", "Catalog file is not valid JSON.") from exc
+        except (ValueError, KeyError, TypeError) as exc:
+            raise SandboxError("corrupted_data", "Catalog must contain a list of photos.") from exc
+        if not isinstance(photos, list) or any(
+            not isinstance(photo, dict)
+            or not all(isinstance(photo.get(field), str) for field in ("photo_id", "file", "title", "category", "shoot"))
+            or not PHOTO_ID_RE.fullmatch(photo["photo_id"])
+            for photo in photos
+        ):
+            raise SandboxError("corrupted_data", "Catalog contains malformed photo records.")
+        if len({photo["photo_id"] for photo in photos}) != len(photos):
+            raise SandboxError("corrupted_data", "Catalog contains duplicate photo ids.")
+        return photos
 
     def get_photo(self, photo_id: str) -> dict:
-        if not PHOTO_ID_RE.match(photo_id):
+        if not PHOTO_ID_RE.fullmatch(photo_id):
             raise SandboxError("invalid_arguments", f"Malformed photo id: {photo_id!r}")
         for record in self.catalog():
             if record["photo_id"] == photo_id:
@@ -88,9 +121,9 @@ class Sandbox:
     def image_path(self, photo_id: str) -> Path:
         record = self.get_photo(photo_id)
         path = (self.photos_dir / record["file"]).resolve()
-        if not path.is_relative_to(self.photos_dir):  # path-traversal guard
+        if not path.is_relative_to(self.photos_dir) or self.photos_dir.resolve() != self.photos_dir:
             raise SandboxError("path_forbidden", "Image path escapes the sandbox.")
-        if not path.exists():
+        if not path.is_file():
             raise SandboxError("image_missing", f"Image file for {photo_id!r} is missing.")
         return path
 
@@ -101,43 +134,58 @@ class Sandbox:
             raise SandboxError("sandbox_unavailable", "Style guide missing.") from exc
 
     def published_records(self) -> list[dict]:
-        if not self.published_dir.exists():
-            return []
-        records = [json.loads(p.read_text(encoding="utf-8")) for p in self.published_dir.glob("*.json")]
-        return sorted(records, key=lambda r: r["published_at"])
+        directory = self._publication_dir()
+        keys = {
+            path.stem
+            for path in directory.glob("*")
+            if path.suffix in ("", ".json") and KEY_RE.fullmatch(path.stem)
+        }
+        records = (self.get_publication(key) for key in keys)
+        return sorted((record for record in records if record is not None), key=lambda r: r["published_at"])
 
     def get_publication(self, key: str) -> dict | None:
-        path = self._record_path(key)
-        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+        directory = self._publication_dir(key)
+        for path in (directory / "record.json", directory.with_suffix(".json")):
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                continue
+        return None
 
     # ---- the single write -----------------------------------------------
     def write_publication(self, key: str, record: dict, image_src: Path) -> tuple[dict, bool]:
-        """Idempotently publish one record. Returns (record, created).
-
-        If ``key`` already exists the existing record is returned and nothing
-        is written. Creation uses ``os.link`` which fails atomically if the
-        target exists, so two concurrent calls cannot both create it.
-        """
-        target = self._record_path(key)
-        if target.exists():
-            return json.loads(target.read_text(encoding="utf-8")), False
-        image_dst = self.published_dir / f"{key}{image_src.suffix}"
-        shutil.copy2(image_src, image_dst)
-        record = {**record, "image_file": image_dst.name}
-        fd, tmp = tempfile.mkstemp(dir=self.published_dir, suffix=".tmp")
+        """Commit one image and its record together, returning (record, created)."""
+        target = self._publication_dir(key)
+        existing = self.get_publication(key)
+        if existing is not None:
+            return existing, False
+        image_src = image_src.resolve()
+        if not image_src.is_relative_to(self.photos_dir):
+            raise SandboxError("path_forbidden", "Publication source escapes the photo directory.")
+        image_name = f"image{image_src.suffix}"
+        record = {**record, "image_file": f"{key}/{image_name}"}
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(record, fh, indent=2)
-            os.link(tmp, target)
-        except FileExistsError:
-            return json.loads(target.read_text(encoding="utf-8")), False
+            with tempfile.TemporaryDirectory(prefix=".publish-", dir=self.published_dir) as tmp:
+                staged = Path(tmp) / "publication"
+                staged.mkdir()
+                shutil.copy2(image_src, staged / image_name)
+                (staged / "record.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+                try:
+                    # A committed target is nonempty, so rename cannot replace it.
+                    staged.rename(target)
+                except OSError:
+                    existing = self.get_publication(key)
+                    if existing is not None:
+                        return existing, False
+                    raise
         except OSError as exc:
             raise SandboxError("write_failed", f"Could not write publication: {exc.strerror}") from exc
-        finally:
-            Path(tmp).unlink(missing_ok=True)
         return record, True
 
-    def _record_path(self, key: str) -> Path:
-        if not KEY_RE.match(key):
+    def _publication_dir(self, key: str | None = None) -> Path:
+        if key is not None and not KEY_RE.fullmatch(key):
             raise SandboxError("invalid_arguments", "Malformed idempotency key.")
-        return self.published_dir / f"{key}.json"
+        directory = self.published_dir if key is None else self.published_dir / key
+        if directory.is_symlink() or directory.resolve() != directory:
+            raise SandboxError("path_forbidden", "Publication directory escapes the sandbox.")
+        return directory
