@@ -57,8 +57,11 @@ def get_photo_metadata(ctx: ToolContext, args: PhotoIdsInput) -> ToolResult:
             missing.append(pid)
             continue
         meta = {k: p.get(k) for k in PUBLIC_FIELDS}
-        meta["description"] = wrap_untrusted(p.get("description", ""))  # untrusted free text
-        meta["publication_eligibility"] = check_publication_eligibility(p).__dict__
+        eligibility = check_publication_eligibility(p)
+        # A blocked imported photo is personal: its description does not reach the model.
+        hide = pid.startswith("gp_") and not eligibility.allowed
+        meta["description"] = wrap_untrusted("" if hide else p.get("description", ""))  # untrusted free text
+        meta["publication_eligibility"] = eligibility.__dict__
         found.append(meta)
     if not found:
         return ToolResult.fail("photo_not_found", f"None of the requested photos exist: {missing}")

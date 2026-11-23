@@ -17,9 +17,10 @@ def render(pages: dict) -> None:
     # Hero: the work itself. Latest published prints, else the first frames of the sheet.
     strip = ([str(sv.sandbox.published_dir / r["image_file"]) for r in published[-4:]]
              or [str(sv.sandbox.image_path(p["photo_id"])) for p in photos[:4]])
-    cols = st.columns(len(strip), gap="small")
-    for col, path in zip(cols, strip):
-        col.image(path, width="stretch")
+    if strip:
+        cols = st.columns(len(strip), gap="small")
+        for col, path in zip(cols, strip):
+            col.image(path, width="stretch")
     st.title("LensPilot")
     st.markdown('<p class="lp-lede">An assistant that reviews your shoot, scores each frame, drafts captions '
                 "in your studio style and prepares a portfolio update. It publishes only to a local sandbox, "
@@ -46,7 +47,8 @@ def render(pages: dict) -> None:
         else:
             st.caption("No run in this session yet.")
         st.page_link(pages["workspace"], label="Open the agent workspace", icon=":material/smart_toy:")
-        st.page_link(pages["gallery"], label="Browse the contact sheet", icon=":material/photo_library:")
+        if "gallery" in pages:
+            st.page_link(pages["gallery"], label="Browse the contact sheet", icon=":material/photo_library:")
         st.page_link(pages["trace"], label="Inspect execution traces", icon=":material/timeline:")
     with right:
         st.subheader("Recent runs")

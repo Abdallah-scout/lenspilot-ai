@@ -76,6 +76,35 @@ def check_caption(caption: str) -> PolicyDecision:
     return PolicyDecision(allowed=not reasons, reasons=reasons)
 
 
+def check_title(title: str) -> list[str]:
+    """Problems with a title typed for an imported photo ([] = fine). Titles reach the model."""
+    if not isinstance(title, str):
+        return ["title must be text"]
+    problems: list[str] = []
+    if not 3 <= len(title.strip()) <= 80:
+        problems.append("title must have 3-80 characters")
+    if scan_for_injection(title) or has_hidden_characters(title):
+        problems.append("title contains instruction-like text or hidden characters")
+    if _CONTROL_RE.search(title) or "\n" in title or _URL_RE.search(title) or _EMAIL_RE.search(title) \
+            or _MARKUP_RE.search(title):
+        problems.append("title contains a link, markup or control characters")
+    return problems
+
+
+def check_description(text: str) -> list[str]:
+    """Problems with an imported photo's description ([] = fine; empty is allowed)."""
+    if not isinstance(text, str):
+        return ["description must be text"]
+    problems: list[str] = []
+    if len(text.strip()) > 600:
+        problems.append("description is longer than 600 characters")
+    if scan_for_injection(text) or has_hidden_characters(text):
+        problems.append("description contains instruction-like text or hidden characters")
+    if _CONTROL_RE.search(text) or _URL_RE.search(text) or _EMAIL_RE.search(text) or _MARKUP_RE.search(text):
+        problems.append("description contains a link, markup or control characters")
+    return problems
+
+
 def check_proposal(items: list[dict], get_photo: Callable[[str], dict]) -> list[dict]:
     """Check every item of a proposal. Returns the blocked items (empty list = all allowed).
 

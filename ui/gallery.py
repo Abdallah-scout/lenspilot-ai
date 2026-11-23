@@ -47,7 +47,7 @@ def render() -> None:
                         f'<div class="lp-muted">{html.escape(p["category"].capitalize())}, {html.escape(p["shoot"])}</div>'
                         f'<div style="margin:6px 0 4px">{eligibility_tags(p)}</div>', unsafe_allow_html=True)
             with st.expander("Metadata"):
-                st.markdown(f'<div class="lp-muted">{p["camera"]}, {p["lens"]}<br>'
+                st.markdown(f'<div class="lp-muted">{html.escape(str(p["camera"]))}, {html.escape(str(p["lens"]))}<br>'
                             f'{p["focal_length_mm"]} mm, {p["aperture"]}, {p["shutter"]} s, ISO {p["iso"]}<br>'
                             f'Captured {p["captured_at"].replace("T", " ")}<br>'
                             f'Visibility {p["visibility"]}, consent {p["client_consent"]} (simulated)</div>',

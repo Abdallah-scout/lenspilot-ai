@@ -276,8 +276,8 @@ class OllamaProvider(OpenAIProvider):
     LOCAL_MODEL_HINT = """
 
 Extra rules for this model:
-1. Your FIRST tool call must be list_photos. Pass category "restaurant" or "interior" ONLY if the user
-   clearly asked for one; otherwise call it with no arguments ({}) to see every photo. Never pass "null".
+1. Your FIRST tool call must be list_photos. Pass category "restaurant", "interior", "people" or "event"
+   ONLY if the user clearly asked for one; otherwise call it with no arguments ({}) to see every photo. Never pass "null".
 2. Only use photo_ids that appeared in a list_photos result. Never invent ids such as "photo1".
 3. Then call get_photo_metadata and evaluate_photo_quality with those ids, then read_style_guide.
 4. Then call prepare_publication with eligible photos (publication_eligibility.allowed is true) and
@@ -285,8 +285,9 @@ Extra rules for this model:
 5. The user cannot answer questions during the run: a reply without a tool call ENDS the task. If a tool
    returns an error, read it, fix the arguments and call the tool again. Only reply with plain text once
    the publication result has arrived, or when nothing eligible can be published (then say why).
-6. If the request mentions something the catalog does not have (e.g. an "event"), pick the photos that
-   best fit from the catalog and say so in your summary.
+6. If the request mentions something the catalog does not have, pick the eligible photos that best fit
+   and say so in your summary. If photos that fit are not eligible, never replace them with unrelated
+   ones: say which photos are blocked and what is missing (visibility or consent).
 7. If prepare_publication returns policy_denied, IMMEDIATELY call prepare_publication again with only the
    eligible photos (same captions). Never write that a proposal was prepared, sent or is awaiting
    approval unless prepare_publication returned status "awaiting_human_approval"."""

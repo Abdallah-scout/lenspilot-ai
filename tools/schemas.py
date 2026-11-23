@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 PhotoId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{1,40}$")]
-Collection = Literal["restaurants", "interiors", "featured"]
+Collection = Literal["restaurants", "interiors", "people", "events", "featured"]
 
 
 class ToolResult(BaseModel):
@@ -42,7 +42,7 @@ class _Strict(BaseModel):
 
 
 class ListPhotosInput(_Strict):
-    category: Literal["restaurant", "interior"] | None = Field(
+    category: Literal["restaurant", "interior", "people", "event"] | None = Field(
         default=None, description="Optional category filter."
     )
 

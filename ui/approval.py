@@ -14,6 +14,7 @@ import streamlit as st
 
 from agent.loop import ApprovalMismatch
 from agent.state import AgentState
+from sandbox import SandboxError
 from ui.common import eligibility_tags, get_agent, get_services, meter, quality_for
 
 
@@ -36,6 +37,12 @@ def render_approval(state: AgentState) -> None:
     if p is None:
         return
     sb = get_services().sandbox
+    try:
+        for item in p.items:
+            sb.image_path(item["photo_id"])
+    except SandboxError:
+        st.warning("A photo in this proposal is no longer available. Cancel this run and start a new one.")
+        return
     st.subheader("Approve this publication?")
     st.markdown(
         f'<div class="lp-proof"><span class="lp-muted">Proposal {p.proposal_id} from run {state.run_id}. '

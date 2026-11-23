@@ -191,7 +191,8 @@ def test_env_loader_reads_file_outside_pytest(tmp_path, monkeypatch):
     import os
     f = tmp_path / ".env"
     f.write_text("# comment\nLENSPILOT_TEST_ONLY_KEY='abc'\nEMPTY=\n", encoding="utf-8")
-    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    import sys
+    monkeypatch.delitem(sys.modules, "pytest")
     monkeypatch.delenv("LENSPILOT_TEST_ONLY_KEY", raising=False)
     load_env_file(f)
     assert os.environ.pop("LENSPILOT_TEST_ONLY_KEY") == "abc" and "EMPTY" not in os.environ

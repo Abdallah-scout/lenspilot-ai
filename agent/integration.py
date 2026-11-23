@@ -42,7 +42,10 @@ class Services:
 
 
 def build_services(data_dir: Path | None = None, quality: QualityEstimator | None = None) -> Services:
-    sandbox = Sandbox(Path(data_dir) / "sandbox" if data_dir is not None else None).ensure()
+    # Only the real app (no explicit data_dir) can hide the demo photos; tests and the evaluation never do.
+    imported_only = data_dir is None and os.environ.get("LENSPILOT_PHOTO_SOURCE") == "google"
+    sandbox = Sandbox(Path(data_dir) / "sandbox" if data_dir is not None else None,
+                      imported_only=imported_only).ensure()
     data_dir = Path(data_dir or os.environ.get("LENSPILOT_DATA_DIR") or PROJECT_ROOT / "var")
     return Services(
         sandbox=sandbox,

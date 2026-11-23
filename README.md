@@ -51,6 +51,21 @@ Ollama's default 4k-token context is too small: the system prompt is silently dr
 after ~4 tool calls and the model stops calling tools. Llama 3.1 8B was tested and is
 not reliable enough (invented ids, wrong argument names).
 
+### LangGraph, LangSmith and Google Photos (test branch)
+
+* **LangGraph** (`agent/graph.py`) orders the steps: *check budget → call model → run tools →
+  wait for human*, and a separate *publish* entry used only by an approval. `python -m agent.graph`
+  prints the diagrams. Limits and permissions stay in `agent/loop.py`.
+* **LangSmith** (`agent/observability.py`) is off by default. Put `LENSPILOT_LANGSMITH=1` and
+  `LANGSMITH_API_KEY` in `.env` to see each node, model call and tool. Requests, photo data and
+  captions are not sent.
+* **Google Photos** (`importers/`, page *Import photos*): save your OAuth client (type *Desktop app*,
+  Photos Picker API enabled) as `var/google/client_secret.json`. Only photos you pick are copied.
+  EXIF and GPS are removed, and they stay private with consent pending until you mark them.
+  `LENSPILOT_PHOTO_SOURCE=google` in `.env` hides the demo photos and the Gallery page in the app.
+* **Photo descriptions** (`importers/vision.py`): the *Describe this photo* button asks a local vision model
+  (`ollama pull qwen3-vl:8b`) for a draft. A human checks and saves it, then the agent can read it.
+
 ## Architecture
 
 ```text

@@ -20,12 +20,15 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = PROJECT_ROOT / "sandbox" / "fixtures"
 PHOTO_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 KEY_RE = re.compile(r"^[a-f0-9]{16,64}$")
+IMPORTED_ID_RE = re.compile(r"^gp_[a-f0-9]{16}$")
+_CATALOG_LOCK = threading.Lock()
 
 
 class SandboxError(Exception):
@@ -39,12 +42,14 @@ class SandboxError(Exception):
 
 
 class Sandbox:
-    def __init__(self, root: Path | str | None = None, fixtures: Path = FIXTURES_DIR):
+    def __init__(self, root: Path | str | None = None, fixtures: Path = FIXTURES_DIR,
+                 imported_only: bool = False):
         if root is None:
             data_dir = Path(os.environ.get("LENSPILOT_DATA_DIR") or PROJECT_ROOT / "var")
             root = os.environ.get("LENSPILOT_SANDBOX_DIR") or data_dir / "sandbox"
         self.root = Path(root).resolve()
         self.fixtures = fixtures
+        self.imported_only = imported_only  # True: the demo photos do not exist for any reader or tool
         self.photos_dir = self.root / "photos"
         self.published_dir = self.root / "published"
         self.catalog_path = self.root / "catalog.json"
@@ -93,6 +98,12 @@ class Sandbox:
 
     # ---- reads ------------------------------------------------------------
     def catalog(self) -> list[dict]:
+        photos = self._full_catalog()
+        if self.imported_only:
+            photos = [p for p in photos if IMPORTED_ID_RE.fullmatch(p["photo_id"])]
+        return photos
+
+    def _full_catalog(self) -> list[dict]:
         try:
             photos = json.loads(self.catalog_path.read_text(encoding="utf-8"))["photos"]
         except FileNotFoundError as exc:
@@ -141,6 +152,8 @@ class Sandbox:
             if path.suffix in ("", ".json") and KEY_RE.fullmatch(path.stem)
         }
         records = (self.get_publication(key) for key in keys)
+        if self.imported_only:
+            records = (r for r in records if r is not None and IMPORTED_ID_RE.fullmatch(r["photo_id"]))
         return sorted((record for record in records if record is not None), key=lambda r: r["published_at"])
 
     def get_publication(self, key: str) -> dict | None:
@@ -152,7 +165,53 @@ class Sandbox:
                 continue
         return None
 
-    # ---- the single write -----------------------------------------------
+    # ---- imports: human actions from the UI, not reachable by the model ---
+    def add_photo(self, record: dict, image: bytes) -> bool:
+        """Add an imported photo. Always private with consent pending. False if already there."""
+        pid = record["photo_id"]
+        if not IMPORTED_ID_RE.fullmatch(pid):
+            raise SandboxError("invalid_arguments", f"Not an imported photo id: {pid!r}")
+        record = {**record, "file": f"{pid}.jpg", "visibility": "private", "client_consent": "pending"}
+        with _CATALOG_LOCK:
+            photos = self._full_catalog()
+            if any(p["photo_id"] == pid for p in photos):
+                return False
+            if self.photos_dir.is_symlink() or self.photos_dir.resolve() != self.photos_dir:
+                raise SandboxError("path_forbidden", "Photo directory escapes the sandbox.")
+            self._atomic_write(self.photos_dir / record["file"], image)
+            self._write_catalog([*photos, record])
+        return True
+
+    def update_imported_photo(self, photo_id: str, *, title: str, category: str,
+                              visibility: str, client_consent: str, description: str | None = None) -> None:
+        """Record the human's decision about an imported photo. Fixture photos cannot be changed."""
+        allowed = (visibility in ("public", "private") and client_consent in ("granted", "pending", "denied")
+                   and category in ("restaurant", "interior", "people", "event"))
+        if not IMPORTED_ID_RE.fullmatch(photo_id) or not allowed:
+            raise SandboxError("invalid_arguments", "Only imported photos can be edited, with known values.")
+        with _CATALOG_LOCK:
+            self.get_photo(photo_id)
+            self._write_catalog([
+                {**p, "title": title, "category": category, "visibility": visibility,
+                 "client_consent": client_consent,
+                 "description": p.get("description", "") if description is None else description} if p["photo_id"] == photo_id else p
+                for p in self._full_catalog()])
+
+    def _write_catalog(self, photos: list[dict]) -> None:
+        self._atomic_write(self.catalog_path, json.dumps({"photos": photos}, indent=2).encode("utf-8"))
+
+    def _atomic_write(self, target: Path, data: bytes) -> None:
+        if target.is_symlink():
+            raise SandboxError("path_forbidden", "Refusing to write through a link.")
+        try:
+            fd, tmp = tempfile.mkstemp(prefix=".write-", dir=self.root)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+            os.replace(tmp, target)
+        except OSError as exc:
+            raise SandboxError("write_failed", f"Could not write the photo: {exc.strerror}") from exc
+
+    # ---- the single publishing write ------------------------------------
     def write_publication(self, key: str, record: dict, image_src: Path) -> tuple[dict, bool]:
         """Commit one image and its record together, returning (record, created)."""
         target = self._publication_dir(key)

@@ -19,6 +19,9 @@ publish result become that tool_result, so the model observes them.
 
 All public methods load state from disk, act under a per-run lock and save,
 so Streamlit reruns or double clicks cannot duplicate work.
+
+The order of the steps is a LangGraph graph (agent/graph.py); the methods
+below are what its nodes execute.
 """
 
 from __future__ import annotations
@@ -30,7 +33,11 @@ import threading
 import time
 from typing import Callable
 
+from langgraph.errors import GraphRecursionError
+
 from agent.config import Limits, estimate_cost_usd
+from agent import observability
+from agent.graph import RUN_GRAPH, TURN_GRAPH, TURN_RECURSION_LIMIT, RunContext, TurnContext
 from agent.prompts import SYSTEM_PROMPT
 from agent.providers import ModelProvider, ProviderError
 from agent.registry import ToolKind, ToolRegistry
@@ -107,7 +114,7 @@ class Agent:
                 raise ValueError(f"Run {run_id} belongs to provider {st.provider!r}.")
             t0 = time.perf_counter()
             try:
-                self._step(st)
+                self._invoke_turn(st, "step")
             finally:
                 st.active_seconds = round(st.active_seconds + time.perf_counter() - t0, 3)
                 self._commit(st, was_terminal=False)
@@ -116,48 +123,23 @@ class Agent:
     def run(self, run_id: str, on_step: Callable[[AgentState], None] | None = None) -> AgentState:
         """Step until the run pauses or stops. Hard-bounded independently of the state checks."""
         st = self.store.load(run_id)
-        for _ in range(st.limits.max_llm_calls + 1):
-            st = self.step(run_id)
-            if on_step:
-                on_step(st)
-            if st.status != AgentStatus.RUNNING:
-                break
-        return st
+        # One graph step = one turn, so recursion_limit bounds the run even if every other check failed.
+        try:
+            RUN_GRAPH.invoke({"status": st.status.value}, context=RunContext(self, run_id, on_step),
+                             config=self._graph_config(st, st.limits.max_llm_calls + 1))
+        except GraphRecursionError:
+            pass
+        return self.store.load(run_id)
 
     def approve(self, run_id: str, proposal_hash: str) -> AgentState:
         with _run_lock(run_id):
             st = self.store.load(run_id)
             if not self._check_pending(st, proposal_hash):
                 return st
-            p = st.pending_approval
             st.approval_history.append(ApprovalRecord(proposal_hash=proposal_hash, decision="approved"))
             self._tracer(st).emit("approval_decision", decision="approved", proposal_hash=proposal_hash)
             t0 = time.perf_counter()
-            if st.steps >= st.limits.max_steps:  # the write is a counted step too
-                self._tracer(st).emit("limit_enforced", limit="max_steps", refused_tool="publish_photo",
-                                      steps=st.steps)
-                self._finish(st, AgentStatus.STOPPED_LIMIT, "max_steps_reached_before_publish")
-                self._commit(st, was_terminal=False)
-                return st
-            token = self.approvals.issue(run_id, p.proposal_hash, approver="human")
-            args = {"run_id": run_id, "proposal_hash": p.proposal_hash, "collection": p.collection,
-                    "items": [{"photo_id": i["photo_id"], "caption": i["caption"]} for i in p.items],
-                    "approval_token": token}
-            result = self._execute(st, "publish_photo", args, origin="orchestrator", retry_number=0)
-            verified = result.success and self._verify_publication(result)
-            if result.success:
-                result.data["verified_in_sandbox"] = verified
-                st.publications.extend(result.data["published"])
-            payload = {"human_decision": "approved", "publish_result": result.model_dump()}
-            st.messages.append({"role": "user", "content": st.pending_tool_results
-                                + [_tool_result_block(p.tool_use_id, payload, is_error=not result.success)]})
-            st.pending_approval, st.pending_tool_results = None, []
-            if result.success and not verified:
-                self._finish(st, AgentStatus.FAILED, "publish_verification_failed")
-            elif not result.success and result.error_code in FATAL_CODES | {"approval_invalid"}:
-                self._finish(st, AgentStatus.FAILED, f"publish_failed:{result.error_code}")
-            else:
-                st.transition(AgentStatus.RUNNING)  # model observes the result and summarises
+            self._invoke_turn(st, "publish")
             st.active_seconds = round(st.active_seconds + time.perf_counter() - t0, 3)
             self._commit(st, was_terminal=False)
             return st
@@ -188,19 +170,38 @@ class Agent:
             return st
 
     # ------------------------------------------------------------------ internals
-    def _step(self, st: AgentState) -> None:
+    @staticmethod
+    def _graph_config(st: AgentState, recursion_limit: int) -> dict:
+        # Metadata reaches LangSmith when tracing is on: identifiers only, never content.
+        return {"recursion_limit": recursion_limit,
+                "metadata": {"session_id": st.run_id, "provider": st.provider, "model": st.model}}
+
+    def _invoke_turn(self, st: AgentState, action: str) -> None:
+        TURN_GRAPH.invoke({"action": action}, context=TurnContext(self, st),
+                          config=self._graph_config(st, TURN_RECURSION_LIMIT))
+
+    # ---- graph nodes (called by agent/graph.py, in this order)
+    def _check_budget(self, st: AgentState) -> None:
         limit = self._budget_exhausted(st)
         if limit:
             self._tracer(st).emit("limit_enforced", limit=limit, steps=st.steps, llm_calls=st.llm_calls)
-            return self._finish(st, AgentStatus.STOPPED_LIMIT, limit)
+            self._finish(st, AgentStatus.STOPPED_LIMIT, limit)
 
+    def _call_model(self, st: AgentState) -> list[dict]:
+        """One model call. Returns the tool calls it requested ([] if the run ended)."""
         try:
-            turn = self.provider.next_turn(SYSTEM_PROMPT, st.messages, self.registry.model_tool_definitions())
+            with observability.span("llm", "llm", ls_provider=st.provider, ls_model_name=st.model) as run:
+                turn = self.provider.next_turn(SYSTEM_PROMPT, st.messages, self.registry.model_tool_definitions())
+                if turn.input_tokens is not None and turn.output_tokens is not None:
+                    observability.annotate(run, usage_metadata={
+                        "input_tokens": turn.input_tokens, "output_tokens": turn.output_tokens,
+                        "total_tokens": turn.input_tokens + turn.output_tokens})
         except ProviderError as exc:
             st.llm_calls += 1
             self._tracer(st).emit("llm_call", llm_call=st.llm_calls, ok=False, error_code=exc.code,
                                   error_message=exc.message)
-            return self._finish(st, AgentStatus.FAILED, exc.code)
+            self._finish(st, AgentStatus.FAILED, exc.code)
+            return []
 
         st.llm_calls += 1
         st.add_tokens(turn.input_tokens, turn.output_tokens)
@@ -211,23 +212,29 @@ class Agent:
         st.messages.append({"role": "assistant", "content": turn.content})
 
         if turn.stop_reason == "refusal":
-            return self._finish(st, AgentStatus.FAILED, "model_refusal")
-        calls = turn.tool_calls
-        if not calls:
+            self._finish(st, AgentStatus.FAILED, "model_refusal")
+            return []
+        if not turn.tool_calls:
             if turn.stop_reason == "max_tokens":
-                return self._finish(st, AgentStatus.FAILED, "model_output_truncated")
-            st.final_result = turn.text or "(The model finished without a summary.)"
-            return self._finish(st, AgentStatus.COMPLETED, "task_completed")
+                self._finish(st, AgentStatus.FAILED, "model_output_truncated")
+            else:
+                st.final_result = turn.text or "(The model finished without a summary.)"
+                self._finish(st, AgentStatus.COMPLETED, "task_completed")
+        return turn.tool_calls
 
+    def _run_tools(self, st: AgentState, calls: list[dict]) -> list[dict]:
+        """Execute the requested calls. Returns the results to send with a pending proposal."""
         results: list[dict] = []
         for call in calls:
             if st.steps >= st.limits.max_steps:  # checked BEFORE every attempt
                 self._tracer(st).emit("limit_enforced", limit="max_steps", refused_tool=call["name"],
                                       steps=st.steps)
-                return self._finish(st, AgentStatus.STOPPED_LIMIT, "max_steps_reached")
+                self._finish(st, AgentStatus.STOPPED_LIMIT, "max_steps_reached")
+                return []
             result, fatal = self._execute_model_call(st, call)
             if fatal:
-                return self._finish(st, AgentStatus.FAILED, fatal)
+                self._finish(st, AgentStatus.FAILED, fatal)
+                return []
             if call["name"] == "prepare_publication" and result.success:
                 d = result.data
                 st.pending_approval = Proposal(proposal_id=d["proposal_id"], proposal_hash=d["proposal_hash"],
@@ -235,13 +242,41 @@ class Agent:
                                                items=d["items"], tool_use_id=call["id"])
                 continue  # its tool_result is sent after the human decides
             results.append(_tool_result_block(call["id"], result.model_dump(), is_error=not result.success))
-
-        if st.pending_approval:
-            st.pending_tool_results = results
-            st.transition(AgentStatus.WAITING_FOR_APPROVAL)
-            self._tracer(st).emit("approval_requested", proposal=st.pending_approval.model_dump())
-        else:
+        if st.pending_approval is None:
             st.messages.append({"role": "user", "content": results})
+        return results
+
+    def _request_approval(self, st: AgentState, results: list[dict]) -> None:
+        st.pending_tool_results = results
+        st.transition(AgentStatus.WAITING_FOR_APPROVAL)
+        self._tracer(st).emit("approval_requested", proposal=st.pending_approval.model_dump())
+
+    def _publish_approved(self, st: AgentState) -> None:
+        """Only reachable from approve(), after _check_pending accepted the human decision."""
+        p = st.pending_approval
+        if st.steps >= st.limits.max_steps:  # the write is a counted step too
+            self._tracer(st).emit("limit_enforced", limit="max_steps", refused_tool="publish_photo",
+                                  steps=st.steps)
+            return self._finish(st, AgentStatus.STOPPED_LIMIT, "max_steps_reached_before_publish")
+        token = self.approvals.issue(st.run_id, p.proposal_hash, approver="human")
+        args = {"run_id": st.run_id, "proposal_hash": p.proposal_hash, "collection": p.collection,
+                "items": [{"photo_id": i["photo_id"], "caption": i["caption"]} for i in p.items],
+                "approval_token": token}
+        result = self._execute(st, "publish_photo", args, origin="orchestrator", retry_number=0)
+        verified = result.success and self._verify_publication(result)
+        if result.success:
+            result.data["verified_in_sandbox"] = verified
+            st.publications.extend(result.data["published"])
+        payload = {"human_decision": "approved", "publish_result": result.model_dump()}
+        st.messages.append({"role": "user", "content": st.pending_tool_results
+                            + [_tool_result_block(p.tool_use_id, payload, is_error=not result.success)]})
+        st.pending_approval, st.pending_tool_results = None, []
+        if result.success and not verified:
+            self._finish(st, AgentStatus.FAILED, "publish_verification_failed")
+        elif not result.success and result.error_code in FATAL_CODES | {"approval_invalid"}:
+            self._finish(st, AgentStatus.FAILED, f"publish_failed:{result.error_code}")
+        else:
+            st.transition(AgentStatus.RUNNING)  # model observes the result and summarises
 
     def _execute_model_call(self, st: AgentState, call: dict) -> tuple[ToolResult, str | None]:
         name, args = call["name"], call.get("input") or {}
@@ -281,9 +316,15 @@ class Agent:
 
     def _execute(self, st: AgentState, name: str, args: dict, origin: str, retry_number: int) -> ToolResult:
         ctx = ToolContext(sandbox=self.sandbox, approvals=self.approvals, quality=self.quality, run_id=st.run_id)
-        result, duration = self.registry.dispatch(name, args, ctx, origin=origin)
+        # The span name comes from the registry, never from the model's text.
+        spec = self.registry.get(name)
+        with observability.span(name if spec else "unknown_tool", "tool", origin=origin,
+                                retry_number=retry_number) as run:
+            result, duration = self.registry.dispatch(name, args, ctx, origin=origin)
+            flags = scan_for_injection(json.dumps(result.data, default=str)) if result.success else []
+            observability.annotate(run, success=result.success, error_code=result.error_code,
+                                   injection_flags=flags or None)
         st.steps += 1
-        flags = scan_for_injection(json.dumps(result.data, default=str)) if result.success else []
         self._record(st, name, args, origin, result, duration, retry_number, flags)
         return result
 

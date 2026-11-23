@@ -6,7 +6,7 @@ import streamlit as st
 
 st.set_page_config(page_title="LensPilot", page_icon=":material/camera:", layout="wide")
 
-from ui import dashboard, execution, gallery, portfolio, workspace  # noqa: E402
+from ui import dashboard, execution, gallery, google_import, portfolio, workspace  # noqa: E402
 from ui.common import apply_theme, get_services, provider_label, provider_options  # noqa: E402
 
 apply_theme()
@@ -23,7 +23,7 @@ with st.sidebar:
                                     "retryable error. Labelled [simulated fault] in the trace.")
     st.divider()
     with st.popover("Reset sandbox", icon=":material/restart_alt:"):
-        st.write("Deletes every published photo and restores the original catalog. Run logs are kept.")
+        st.write("Deletes every published and imported photo and restores the original catalog. Run logs are kept.")
         if st.button("Reset now", type="primary"):
             get_services().sandbox.reset()
             st.session_state.pop("active_run_id", None)
@@ -40,7 +40,10 @@ def workspace_page() -> None:
 pages: dict = {}
 pages["dashboard"] = st.Page(dashboard_page, title="Dashboard", icon=":material/home:",
                              url_path="dashboard", default=True)
-pages["gallery"] = st.Page(gallery.render, title="Gallery", icon=":material/photo_library:", url_path="gallery")
+if not get_services().sandbox.imported_only:
+    pages["gallery"] = st.Page(gallery.render, title="Gallery", icon=":material/photo_library:", url_path="gallery")
+pages["import"] = st.Page(google_import.render, title="Import photos", icon=":material/add_photo_alternate:",
+                          url_path="import")
 pages["workspace"] = st.Page(workspace_page, title="Agent workspace",
                              icon=":material/smart_toy:", url_path="workspace")
 pages["portfolio"] = st.Page(portfolio.render, title="Published portfolio", icon=":material/collections:",

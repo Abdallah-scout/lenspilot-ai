@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -14,7 +15,7 @@ def load_env_file(path: Path | None = None) -> None:
     Existing environment variables win. Skipped while pytest runs, so the
     offline test suite can never pick up a real key and make paid calls.
     """
-    if os.environ.get("PYTEST_CURRENT_TEST"):
+    if "pytest" in sys.modules:  # PYTEST_CURRENT_TEST is not set yet while tests are collected
         return
     path = path or Path(__file__).resolve().parent.parent / ".env"
     if not path.is_file():
