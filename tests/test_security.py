@@ -2,6 +2,8 @@
 
 Covers each control on its own, without the agent loop:
 eligibility policy, approval tokens, injection scanner, caption guard.
+
+Run only this file: python -m pytest tests/test_security.py
 """
 
 from __future__ import annotations

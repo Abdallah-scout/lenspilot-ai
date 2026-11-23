@@ -4,6 +4,8 @@ tests/test_stopping.py (Abdallah) proves the main limits. These tests probe
 the boundaries: bursts larger than the budget, a proposal on the last step,
 an exact budget, zero retries, the token budget, and decisions that arrive
 after the run has already ended.
+
+Run only this file: python -m pytest tests/test_stop_edge_cases.py
 """
 
 from __future__ import annotations

@@ -1,6 +1,7 @@
 # LensPilot AI — Threat Model: Injection Through Tool Output
 
 **Owner:** Skander (Safety + failure engineering)
+<!-- Reviewer note: the test files listed below cover these controls; run `python -m pytest`. -->
 **Scope:** the agent loop, its six tools, the sandbox and the human checkpoint.
 **Code:** `security/` (policy, approval tokens, injection scanner), entry point `agent/safety.py`.
 **Tests:** `tests/test_security.py`, `tests/test_injection_attacks.py`,

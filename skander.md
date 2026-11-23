@@ -1,6 +1,7 @@
 # LensPilot AI — Skander's Safety & Failure Engineering Guide
 
 **Role:** Safety + failure engineering
+<!-- Reviewer note: read this first, then threat_model.md for the attack details. -->
 **Course:** CS496 AI Engineering — Project 3, "The Operator"
 **Hand-off (from the proposal):** `agent/safety.py`, `errors.md` (tests per class), `threat_model.md`
 

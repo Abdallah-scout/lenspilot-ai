@@ -3,6 +3,9 @@
 These verify the translation code; they are NOT a live inference test and
 never touch the network. A live run: put OPENAI_API_KEY in .env, then
 ``python -m agent.cli "..." --provider openai --decision approve``.
+
+Also covers OllamaProvider (local model), including the parser that recovers tool
+calls written as plain text. Added by Skander.
 """
 
 from __future__ import annotations

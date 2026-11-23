@@ -6,6 +6,8 @@ token) and checks two things:
   1. OBSERVABILITY: the injection is flagged in the trace;
   2. SAFETY: nothing is written to the sandbox without a valid human approval.
 Results are summarised in threat_model.md, section 6.
+
+Run only this file: python -m pytest tests/test_injection_attacks.py
 """
 
 from __future__ import annotations

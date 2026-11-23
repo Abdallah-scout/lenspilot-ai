@@ -2,6 +2,9 @@
 
 Owner: Skander (safety + failure engineering).
 
+Review tip: start at SAFETY_INVARIANTS (S1-S8); each entry names the code that
+enforces the rule and the test that proves it.
+
 The proposal lists ``agent/safety.py`` as Skander's hand-off. The actual
 implementation lives in the ``security`` package (already wired into the
 tools, the loop and the UI); this module re-exports it and documents, in one

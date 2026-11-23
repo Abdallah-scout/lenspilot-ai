@@ -3,6 +3,9 @@
 Owner: Skander (approval policy / write protection).
 (Started as an integration baseline by Abdallah; hardened by Skander.)
 
+Tests: tests/test_security.py::TestApprovalTokens (unit) and the forged, replayed and
+expired token cases in tests/test_injection_attacks.py (end to end).
+
 A token is ``<issued_at>.<hmac>`` where the HMAC covers
 (run_id, proposal_hash, issued_at). Consequences:
   * it can only be minted by code holding the secret (the orchestrator's

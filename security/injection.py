@@ -3,6 +3,8 @@
 Owner: Skander (prompt-injection defences).
 (Started as an integration baseline by Abdallah; hardened by Skander.)
 
+Tests: tests/test_security.py::TestInjectionScanner. Known limits: threat_model.md (R4).
+
 Detection here is for OBSERVABILITY only (it puts flags in the trace). The
 actual defence is structural and does not depend on detecting anything:
 the model has no publish tool, writes need an HMAC token minted by a human

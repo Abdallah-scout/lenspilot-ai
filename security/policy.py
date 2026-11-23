@@ -3,6 +3,8 @@
 Owner: Skander (security policy).
 (Started as an integration baseline by Abdallah; hardened by Skander.)
 
+Tests: tests/test_security.py::TestEligibility, TestCaptionGuard and TestCheckProposal.
+
 Deterministic rules; the LLM is never consulted.
 
 ``check_publication_eligibility`` is called in prepare_publication (before
